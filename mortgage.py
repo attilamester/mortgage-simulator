@@ -13,7 +13,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-# In[99]:
+# In[105]:
 
 
 def plot_simulation(loan_amount, months, interest_rate, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True, show=False):
@@ -76,7 +76,7 @@ def plot_simulation(loan_amount, months, interest_rate, extra_payments=0, prepay
         "Month", 
         "Remaining Balance", 
         "Montly payment = P + I", 
-        "Princiap (P)", 
+        "Principal (P)", 
         "Interest (I)", 
         "Cumulative P",
         "Cumulative I"])
@@ -123,19 +123,19 @@ def plot_full_simulation(loan_amount, months, interest_rate, extra_payments=0, p
     return data
 
 
-# In[100]:
+# In[106]:
 
 
 df_data, df_data_ = plot_full_simulation(100000, 25*12, 5.2 / 100, extra_payments=1000, prepay_penalties=0.01, extra_payment_reduce_term=True)
 
 
-# In[102]:
+# In[107]:
 
 
 df_data
 
 
-# In[104]:
+# In[108]:
 
 
 df_data_
