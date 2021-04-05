@@ -114,7 +114,7 @@ def plot_full_simulation(loan_amount, months, interest_rate, extra_payments=0, p
         plt.subplot(133)
         plt.bar([0], [loan_amount], label="A. Loan amount")
         plt.bar([1], [df_data["Cumulative I"].iloc[-1]], label="B. Total interest after loan term", color="r")
-        plt.bar([2], [df_data_["Cumulative I"].iloc[-1]], label="C. (B) with monthly extra payments", color="green")
+        plt.bar([2], [df_data2["Cumulative I"].iloc[-1]], label="C. (B) with monthly extra payments", color="green")
         plt.ylabel("Value")
         plt.xticks([0, 1, 2], ["Loan amount", "B. Interest", "C. Interest"])
         plt.legend()
