@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[98]:
+# In[ ]:
 
 
 import numpy
@@ -13,10 +13,10 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-# In[105]:
+# In[2]:
 
 
-def plot_simulation(loan_amount, months, interest_rate, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True, show=False):
+def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True, show=False):
     """
     Simulate a fixed-rate mortgage (FRM)
     :param loan_amount: 
@@ -25,8 +25,10 @@ def plot_simulation(loan_amount, months, interest_rate, extra_payments=0, prepay
         term of mortgage in months
     :param interest_rate: 
         annual percentage of the remaining loan balance
+    :param monthly_fees:
+        monthly fees like house/life insurance
     :param extra_payments:
-        optional; monthly extra payments
+        optional; if a number, then monthly extra payments; if a list, then the corresponding months' payment value
     :param prepay_penalties:
         optional; in case of montly extra payments (e.g. 0.01 means 1% of the prepaid value)
     :param extra_payment_reduce_term:
@@ -36,41 +38,68 @@ def plot_simulation(loan_amount, months, interest_rate, extra_payments=0, prepay
     :return: 
         pd.DataFrame
         [
-            [no. month, loan balance, monthly payment = P + I, principal (P), interest (I), cumulative principal, cumulative interest],
+            [no. month, loan balance, monthly payment = P + I + F (fee), principal (P), interest (I), cumulative principal, cumulative interest],
             ...
         ]
     """
 
     cumulative_interest = 0
     cumulative_principal = 0
+    fees = 0
     
     data = []
     balance = loan_amount
     
+    
+    
     # Excel.PMT function
     monthly_payment = -numpy.pmt(interest_rate / 12, months, loan_amount)
+    
+    TITLE_MONTHLY_PAYMENT = f"* monthly payment: {monthly_payment:0.2f} + {monthly_fees:.2f} fee = {monthly_payment+monthly_fees:0.2f} \n"
     
     for i in range(months):
         if balance <= 0:
             break
+            
+        # Recalc. interest after initial period of 10 years for e.g.
+        if i == 10 * 12 - 1:
+            interest_rate = 4.47 / 100
+#             monthly_payment = -numpy.pmt(interest_rate / 12, months - i, balance)
+            TITLE_MONTHLY_PAYMENT += f"* monthly payment: {monthly_payment:0.2f} + {monthly_fees:.2f} fee = {monthly_payment+monthly_fees:0.2f} [after 10y]\n"
+            
+            
             
         interest = balance * (interest_rate / 12)
         principal = min(balance, monthly_payment - interest)
         balance -= principal
         
         if balance > 0 and extra_payments:
-            extra = min(balance, extra_payments * (1 - prepay_penalties)) # prepay penalties aka. commission / fee
-            principal += extra
-            balance -= extra
             
-            if not extra_payment_reduce_term:
-                monthly_payment = -numpy.pmt(interest_rate / 12, months - i, balance)
+            # ================
+            # Handle optional extra payment
+            # ================
+            extra = 0
+            
+            if isinstance(extra_payments, list):
+                if i < len(extra_payments):
+                    extra = extra_payments[i]
+            elif isinstance(extra_payments, (int, float)):
+                extra = extra_payments
+                  
+            if extra:
+                extra = min(balance, extra * (1 - prepay_penalties)) # prepay penalties aka. commission / fee
+                principal += extra
+                balance -= extra
+
+                if not extra_payment_reduce_term:
+                    monthly_payment = -numpy.pmt(interest_rate / 12, months - i, balance)
         
         
         cumulative_principal += principal
         cumulative_interest += interest
+        fees += monthly_fees
         
-        data.append([i + 1, balance, monthly_payment, principal, interest, cumulative_principal, cumulative_interest])
+        data.append([i + 1, balance, monthly_payment + monthly_fees, principal, interest, cumulative_principal, cumulative_interest])
         
     df_data = pd.DataFrame(data, columns=[
         "Month", 
@@ -86,7 +115,8 @@ def plot_simulation(loan_amount, months, interest_rate, extra_payments=0, prepay
     
     plt.title(f"{payments} payments ({years}y, {payments - years  *12}m)\n"
               f"* loan amount: {loan_amount:.2f}, yearly interest rate: {interest_rate * 100:0.4f}%\n"
-              f"* monthly payment: {monthly_payment + extra_payments:0.2f}\n"
+              f"{TITLE_MONTHLY_PAYMENT}"
+              f"* total fees: {fees:0.2f} \n"
               f"* total interest:  {df_data['Cumulative I'].iloc[-1]:0.2f}\n"
               f"* total principal: {df_data['Cumulative P'].iloc[-1]:0.2f}", loc="left")
     X = list(range(len(df_data)))
@@ -101,17 +131,19 @@ def plot_simulation(loan_amount, months, interest_rate, extra_payments=0, prepay
         
     return df_data
     
-def plot_full_simulation(loan_amount, months, interest_rate, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True):
+def plot_full_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True):
     plt.figure(figsize=(20, 5))
     plt.subplot(131)
-    df_data = plot_simulation(loan_amount, months, interest_rate, extra_payments=0)
+    df_data = plot_simulation(loan_amount, months, interest_rate, monthly_fees)
     data = [df_data]
-    if extra_payments > 0:
+    if extra_payments:
         plt.subplot(132)
-        df_data2 = plot_simulation(loan_amount, months, interest_rate, extra_payments, prepay_penalties, extra_payment_reduce_term)
+        df_data2 = plot_simulation(loan_amount, months, interest_rate, monthly_fees, extra_payments, prepay_penalties, extra_payment_reduce_term)
         data.append(df_data2)
         
         plt.subplot(133)
+        diff = df_data["Cumulative I"].iloc[-1] -                df_data2["Cumulative I"].iloc[-1]
+        plt.title(f"Difference in interest: {diff:.2f}")
         plt.bar([0], [loan_amount], label="A. Loan amount")
         plt.bar([1], [df_data["Cumulative I"].iloc[-1]], label="B. Total interest after loan term", color="r")
         plt.bar([2], [df_data2["Cumulative I"].iloc[-1]], label="C. (B) with monthly extra payments", color="green")
@@ -123,22 +155,22 @@ def plot_full_simulation(loan_amount, months, interest_rate, extra_payments=0, p
     return data
 
 
-# In[106]:
+# In[14]:
 
 
-df_data, df_data_ = plot_full_simulation(100000, 25*12, 5.2 / 100, extra_payments=1000, prepay_penalties=0.01, extra_payment_reduce_term=True)
+# df = plot_full_simulation(380000, 210, (4.88) / 100, monthly_fees=47.5, extra_payments=0, prepay_penalties=0.00, extra_payment_reduce_term=True)
 
 
-# In[107]:
+# In[16]:
 
 
-df_data
+df = plot_full_simulation(380000, 210, (4.88) / 100, monthly_fees=47.5, extra_payments=[42 * 10, 42 * 100, 42 * 1000], prepay_penalties=0.00, extra_payment_reduce_term=True)
 
 
-# In[108]:
+# In[4]:
 
 
-df_data_
+df[0]
 
 
 # In[ ]:
