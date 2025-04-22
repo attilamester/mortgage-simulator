@@ -3,7 +3,7 @@
 
 # In[19]:
 
-
+from datetime import date
 import numpy
 import numpy_financial as npf
 import matplotlib.pyplot as plt
@@ -13,18 +13,16 @@ get_ipython().run_line_magic('matplotlib', 'inline')
 import warnings
 warnings.filterwarnings('ignore')
 
-
 # In[20]:
 
-
-def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True, show=False):
+def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True, show=False, start_date=None, current_date=None):
     """
     Simulate a fixed-rate mortgage (FRM)
     :param loan_amount: 
         initial loan balance
     :param months: 
         term of mortgage in months
-    :param interest_rate: 
+    :param interest_rate:
         annual percentage of the remaining loan balance
     :param monthly_fees:
         monthly fees like house/life insurance
@@ -36,6 +34,10 @@ def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_pa
         optional; in case of montly extra payments; True: keep the rate fixed, False: reduce the rate
     :param show:
         show plot of cumulative principal and cumulative interest
+    :param start_date:
+        optional; start date of the mortgage; if None, then today
+    :param current_date:
+        optional; current date of the mortgage. Used to calculate the remaining interest and principal from this time.
     :return: 
         pd.DataFrame
         [
@@ -51,16 +53,28 @@ def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_pa
     data = []
     balance = loan_amount
     
-    
+    if start_date:
+        simulation_date = start_date
+    else:
+        today = date.today()
+        simulation_date = today.year, today.month
     
     # Excel.PMT function
     monthly_payment = -npf.pmt(interest_rate / 12, months, loan_amount)
     
     TITLE_MONTHLY_PAYMENT = f"* monthly payment: {monthly_payment:0.2f} + {monthly_fees:.2f} fee = {monthly_payment+monthly_fees:0.2f} \n"
-    
+
+    interest_more_from_now = 0
+    principal_more_from_now = 0
+
     for i in range(months):
         if balance <= 0:
             break
+
+        # add one month
+        simulation_date = (simulation_date[0], simulation_date[1] + 1)
+        if simulation_date[1] > 12:
+            simulation_date = (simulation_date[0] + 1, 1)
             
         # Recalc. interest after initial period of 10 years for e.g.
         if i == 10 * 12 - 1:
@@ -73,7 +87,8 @@ def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_pa
         interest = balance * (interest_rate / 12)
         principal = min(balance, monthly_payment - interest)
         balance -= principal
-        
+
+
         if balance > 0 and extra_payments:
             
             # ================
@@ -94,11 +109,15 @@ def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_pa
 
                 if not extra_payment_reduce_term:
                     monthly_payment = -npf.pmt(interest_rate / 12, months - i, balance)
-        
+
         
         cumulative_principal += principal
         cumulative_interest += interest
         fees += monthly_fees
+
+        if current_date and current_date < simulation_date:
+            interest_more_from_now += interest
+            principal_more_from_now += principal
         
         data.append([i + 1, balance, monthly_payment + monthly_fees, principal, interest, cumulative_principal, cumulative_interest])
         
@@ -113,8 +132,17 @@ def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_pa
         
     payments = len(df_data)
     years = payments // 12
+
+    if current_date:
+        months_diff = (simulation_date[0] - current_date[0]) * 12 + (simulation_date[1] - current_date[1])
+        current_info = (f"\n* remaining from {current_date}: \n"
+                        f"\t payments: {months_diff}\n"
+                        f"\t interest:  {interest_more_from_now:.2f}\n"
+                        f"\t principal: {principal_more_from_now:.2f}")
+    else:
+        current_info = ""
     
-    plt.title(f"{payments} payments ({years}y, {payments - years  *12}m)\n"
+    plt.title(f"{payments} payments ({years}y, {payments - years  *12}m, ending on {simulation_date}{current_info})\n"
               f"* loan amount: {loan_amount:.2f}, yearly interest rate: {interest_rate * 100:0.4f}%\n"
               f"{TITLE_MONTHLY_PAYMENT}"
               f"* total fees: {fees:0.2f} \n"
@@ -123,6 +151,10 @@ def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_pa
     X = list(range(len(df_data)))
     plt.plot(X, df_data["Cumulative I"], label="Cumulative interest", c="g" if extra_payments else "r")
     plt.plot(X, df_data["Cumulative P"], label="Cumulative principal", c="b")
+    # plot a vertical line for the current date
+    if current_date:
+        months_diff = (current_date[0] - start_date[0]) * 12 + (current_date[1] - start_date[1])
+        plt.axvline(x=months_diff, color='orange', linestyle='--', label="Current date")
     plt.ylabel("Value")
     plt.xlabel("Month")
     plt.legend()
@@ -132,14 +164,14 @@ def plot_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_pa
         
     return df_data
     
-def plot_full_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True):
+def plot_full_simulation(loan_amount, months, interest_rate, monthly_fees=0, extra_payments=0, prepay_penalties=0.01, extra_payment_reduce_term=True, start_date=None, current_date=None):
     plt.figure(figsize=(20, 5))
     plt.subplot(131)
-    df_data = plot_simulation(loan_amount, months, interest_rate, monthly_fees)
+    df_data = plot_simulation(loan_amount, months, interest_rate, monthly_fees, start_date=start_date, current_date=current_date)
     data = [df_data]
     if extra_payments:
         plt.subplot(132)
-        df_data2 = plot_simulation(loan_amount, months, interest_rate, monthly_fees, extra_payments, prepay_penalties, extra_payment_reduce_term)
+        df_data2 = plot_simulation(loan_amount, months, interest_rate, monthly_fees, extra_payments, prepay_penalties, extra_payment_reduce_term, start_date=start_date, current_date=current_date)
         data.append(df_data2)
         
         plt.subplot(133)
